@@ -26,7 +26,9 @@ The main function to use is `bifurcation1D()`. In order to use it, you must firs
 [dx, fprime] = dynSys(x,r)
 ```
 
-Where the output `dx` is the value of `f(x,r)` and `fprime` is `df/dx`. In the current implementation, the function must be **vectorized** for values of `x`, though not for `r`. 
+Where the output `dx` is the value of `f(x,r)` and `fprime` is `df/dx`. 
+
+In the current implementation `bifurcation1D()` autodetects the level of vectorization of the input function and responds accordingly. Best results can be obtained if the dynamic system will respond to a `meshgrid` of `x` and `r`. If not, the system should be vectorized for at least `x`. If it isn't vectorized at all, results will still be obtained but more slowly.
 
 Once the dynamic system is defined, you may call one of the following commands to generate the bifurcation diagram. `xLim` and `rLim` represent limits on `x` and `r` respectively, such that `-xLim < x < xLim` and `-rLim < r < rLim`. Default values are used if these are not specified.
 

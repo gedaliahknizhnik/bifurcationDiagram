@@ -1,12 +1,15 @@
 function [bfData] = bifurcation1D(dynSys, xLim, rLim)
 % BIFURCATION1D This function creates a bifurcation diagram for a 1D
-% system given its dynamics in the form xdot = f(x,r).
+%   system given its dynamics in the form xdot = f(x,r).
+%
+%   The function will handle inputs that are vectorized or not. For best
+%   performance, vectorize in BOTH x and r to allow a meshgrid operation to
+%   succeed. Ok performance is achieved with vectorization in x only. Worst
+%   performance occurs if not vectorized at all.
 %
 % INPUTS:
 %   dynSys - [required] function handle to a function of the form
 %               [xdot, fprime] = dynSys(x,r). 
-%            Function must be vectorized to return values for multiple
-%            values of x.
 %   xLim   - [optional] 1x1 max value of x. Will consider -xLim<x<xLim
 %   rLim   - [optional] 1x1 max value of r. Will consider -rLim<r<rLim
 %
@@ -18,26 +21,62 @@ function [bfData] = bifurcation1D(dynSys, xLim, rLim)
 
 
 if nargin < 2
-    xLim = pi/2;
+    xLim = 3.5;%pi/2;
 end
 
 if nargin < 3
     rLim = 4;
 end
-    xs = [-xLim:0.01:xLim]';
+
+step = 0.01;
+
+xs = [-xLim:step:xLim]';
+rs = [-rLim:step:rLim]';
 
 bfData = [];
 
-for rr = -rLim:0.05:rLim
+% Attempt to solve using meshgrid for optimal time
+% Function needs to be vectorized in both x and r
+try
+    [Xs,Rs]        = meshgrid(xs,rs); % Assemble the input data
+    [dXs, fPrimes] = dynSys(Xs,Rs);   % Evaluate the dynamic system
+    [zs,ss,rs]     = zeroFinder(dXs, Xs, fPrimes, Rs);    % Find the zeros
+    bfData         = [rs,zs,ss];      % Assemble the final data
 
-    [dxs, fPrimes] = dynSys(xs,rr);
-
-    [zs,ss] = zeroFinder(dxs, xs, fPrimes);
-
-    bfData = [bfData; rr*ones(size(zs,1),1), zs, ss];
+% If function isn't vectorized in both x and r, try 
+% to use x as a vector and r as a scalar
+catch
+    try
+        % For each r
+        for rr = -rLim:step:rLim
+            [dxs, fPrimes] = dynSys(xs,rr); % Evaluate the system
+            [zs,ss] = zeroFinder(dxs, xs, fPrimes, rr); % Find the zeros
+            bfData = [bfData; rr*ones(size(zs,1),1), zs, ss]; % Assemble the final data
+        end
+        
+   % If the function isn't vectorized in either x or r, go through each one
+    catch
+        
+        % For each r
+        for rr = -rLim:step:rLim
+            
+            dxs     = 0*xs;
+            fPrimes = dxs;
+            
+            % For each x, assemble the dxs and fPrimes
+            for ii=1:numel(xs)
+                [dx, fPrime] = dynSys(xs(ii), rr); % Evaluate the system
+                dxs(ii)      = dx;
+                fPrimes(ii)  = fPrime;
+            end
+            
+            [zs,ss] = zeroFinder(dxs, xs, fPrimes, rr);       % Find the zeros
+            bfData = [bfData; rr*ones(size(zs,1),1), zs, ss]; % Assemble the final data
+        end
+    end
 end
-close all
-
+    
+%% Plot the bifurcation diagram
 figure
 
 iStable  = find(bfData(:,3) < 0);
@@ -59,35 +98,5 @@ plot(bfData(iMarg,2),    bfData(iMarg,1)    ,'g*','Linewidth',1.2)
 xlabel('$x$','Interpreter','Latex')
 ylabel('$r$','Interpreter','Latex')
 ylim([-rLim,rLim]), axis square
-end
 
-
-function [zs, ss] = zeroFinder(y, x, f)
-    
-    % Find spots actually equal to zero
-    zeroInds = find(y == 0);
-    zs       = x(zeroInds);
-    ss       = sign(f(zeroInds));
-    
-    % Find zero crossings
-    zci = find(y(:).*circshift(y(:), [-1 0]) <= 0);  
-    
-    
-    % Remove zero crossings taken care of by zeroInds
-    for ii=1:size(zeroInds,1)
-        zci(abs(zci(:,1) - zeroInds(ii)) <= 1) = [];
-    end
-    
-    if numel(zci) > 0
-        % Remove last index if needed
-        if zci(end) == size(y,1)
-            zci(end) = [];
-        end
-        
-        for ii=1:size(zci,1)
-            zs = [zs; interp1(y(zci(ii):zci(ii)+1),x(zci(ii):zci(ii)+1),0)];
-            ss = [ss; sign(interp1(y(zci(ii):zci(ii)+1),f(zci(ii):zci(ii)+1),0))];
-        end
-    end
-    zs;
 end
